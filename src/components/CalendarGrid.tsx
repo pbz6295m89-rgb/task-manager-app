@@ -1,6 +1,6 @@
 "use client";
 
-import { format, isSameMonth } from "date-fns";
+import { format, isSameMonth, isToday } from "date-fns";
 import { buildMonthGrid } from "@/lib/date";
 import type { CalendarEvent, DailyLog } from "@/lib/types";
 
@@ -10,6 +10,14 @@ type Props = {
   events: CalendarEvent[];
   onDayClick: (dateKey: string) => void;
 };
+
+function scoreStyle(score?: number) {
+  if (score === undefined) return "bg-slate-100 text-slate-400";
+  if (score >= 500) return "bg-emerald-600 text-white";
+  if (score >= 100) return "bg-emerald-50 text-emerald-700";
+  if (score >= 0) return "bg-amber-50 text-amber-700";
+  return "bg-rose-50 text-rose-700";
+}
 
 export function CalendarGrid({
   monthDate,
@@ -21,60 +29,82 @@ export function CalendarGrid({
   const logMap = new Map(logs.map((log) => [log.log_date, log]));
 
   return (
-    <div className="grid grid-cols-7 gap-2">
-      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-        <div
-          key={day}
-          className="pb-1 text-center text-[11px] font-medium text-slate-400"
-        >
-          {day}
-        </div>
-      ))}
-
-      {grid.map((date) => {
-        const key = format(date, "yyyy-MM-dd");
-        const log = logMap.get(key);
-        const inMonth = isSameMonth(date, monthDate);
-        const dayEvents = events.filter((event) => event.event_date === key);
-
-        return (
-          <button
-            key={key}
-            onClick={() => onDayClick(key)}
-            className={`min-h-28 rounded-2xl border p-2 text-left transition active:scale-[0.98] active:bg-emerald-50 ${
-              inMonth
-                ? "border-slate-200 bg-white"
-                : "border-slate-100 bg-slate-50 text-slate-300"
-            }`}
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      {/* 曜日 */}
+      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+        {["日", "月", "火", "水", "木", "金", "土"].map((day) => (
+          <div
+            key={day}
+            className="py-2 text-center text-[10px] font-semibold text-slate-400 sm:text-xs"
           >
-            <div className="flex items-start justify-between">
-              <div className="text-sm font-semibold">{format(date, "d")}</div>
+            {day}
+          </div>
+        ))}
+      </div>
 
-              {log ? (
-                <div className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                  {log.score}
-                </div>
-              ) : null}
-            </div>
+      {/* 日付 */}
+      <div className="grid grid-cols-7 gap-0">
+        {grid.map((date) => {
+          const key = format(date, "yyyy-MM-dd");
+          const log = logMap.get(key);
+          const inMonth = isSameMonth(date, monthDate);
+          const dayEvents = events.filter((event) => event.event_date === key);
+          const today = isToday(date);
 
-            <div className="mt-2 space-y-1 overflow-hidden">
-              {dayEvents.slice(0, 4).map((event) => (
+          return (
+            <button
+              key={key}
+              onClick={() => onDayClick(key)}
+              className={`min-h-[86px] border-r border-b border-slate-100 p-1 text-left transition active:bg-emerald-50 sm:min-h-28 sm:p-2 md:min-h-32 md:p-3 ${
+                inMonth ? "bg-white" : "bg-slate-50 text-slate-300"
+              } ${today ? "relative bg-slate-50" : ""}`}
+            >
+              <div className="flex items-start justify-between gap-1">
                 <div
-                  key={event.id}
-                  className="truncate rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] text-indigo-700"
-                  title={event.title}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold sm:h-7 sm:w-7 sm:text-xs ${
+                    today
+                      ? "bg-slate-900 text-white"
+                      : inMonth
+                        ? "text-slate-800"
+                        : "text-slate-300"
+                  }`}
                 >
-                  {event.title}
+                  {format(date, "d")}
                 </div>
-              ))}
 
-              {dayEvents.length > 4 ? (
-                <div className="text-[10px] text-slate-400">...</div>
-              ) : null}
-            </div>
-          </button>
-        );
-      })}
+                {log ? (
+                  <div
+                    className={`max-w-[38px] truncate rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:max-w-[48px] sm:text-[10px] ${scoreStyle(
+                      log.score
+                    )}`}
+                    title={`${log.score} pt`}
+                  >
+                    {log.score}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-1 space-y-1 overflow-hidden">
+                {dayEvents.slice(0, 2).map((event) => (
+                  <div
+                    key={event.id}
+                    className="truncate rounded-md bg-indigo-50 px-1 py-0.5 text-[9px] font-medium text-indigo-700 sm:px-1.5 sm:text-[10px]"
+                    title={event.title}
+                  >
+                    {event.title}
+                  </div>
+                ))}
+
+                {dayEvents.length > 2 ? (
+                  <div className="truncate text-[9px] font-medium text-slate-400 sm:text-[10px]">
+                    他{dayEvents.length - 2}件
+                  </div>
+                ) : null}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
