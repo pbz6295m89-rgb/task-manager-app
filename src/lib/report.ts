@@ -6,7 +6,6 @@ export function createDraftReport(
   tasks: Task[],
   previousLogs: DailyLog[]
 ): DailyReport {
-  // previousLogs は今は使わないが、既存の呼び出し側を壊さないために残す
   void previousLogs;
 
   const dayTasks = tasks.filter((task) => task.work_date === date);
@@ -76,30 +75,35 @@ export function buildResultCopyText(report: DailyReport) {
   const initialTasks = report.tasks.filter(
     (task) => task.task_type === "initial"
   );
+
   const addedTasks = report.tasks.filter((task) => task.task_type === "added");
 
   const lines: string[] = [];
 
   lines.push(`日付: ${report.date}`);
-  lines.push(`スコア: ${report.score}`);
   lines.push("");
 
   lines.push("初期タスク名:");
-  for (const task of initialTasks) {
-    lines.push(
-      `- ${task.title}: 予測時間 ${task.estimated_minutes}分 / 実績時間 ${Math.round(
-        task.actual_seconds / 60
-      )}分 / ${reportStatusLabel(task.status, task.actual_seconds)}`
-    );
+  if (initialTasks.length === 0) {
+    lines.push("- なし");
+  } else {
+    for (const task of initialTasks) {
+      lines.push(
+        `- ${task.title}: 予測時間 ${task.estimated_minutes}分 / 実績時間 ${Math.round(
+          task.actual_seconds / 60
+        )}分 / ${reportStatusLabel(task.status, task.actual_seconds)}`
+      );
 
-    if (task.reason.trim()) {
-      lines.push(`  進捗報告: ${task.reason}`);
+      if (task.reason.trim()) {
+        lines.push(`  進捗報告: ${task.reason}`);
+      }
     }
   }
 
   if (addedTasks.length > 0) {
     lines.push("");
     lines.push("追加タスク:");
+
     for (const task of addedTasks) {
       lines.push(
         `- ${task.title}: 実績時間 ${Math.round(
@@ -116,11 +120,9 @@ export function buildResultCopyText(report: DailyReport) {
   lines.push("");
   lines.push(`合計実績時間: ${Math.round(report.total_actual_seconds / 60)}分`);
 
-  if (report.overall_memo.trim()) {
-    lines.push("");
-    lines.push("コメント:");
-    lines.push(report.overall_memo);
-  }
+  lines.push("");
+  lines.push("コメント:");
+  lines.push(report.overall_memo.trim() ? report.overall_memo : "");
 
   return lines.join("\n");
 }

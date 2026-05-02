@@ -15,6 +15,12 @@ import { useAppStore } from "@/store/useAppStore";
 
 type ImageTableRow = string[];
 
+function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 async function copyTableImageToClipboard({
   title,
   headers,
@@ -237,6 +243,14 @@ export default function ReportPage() {
   const copyEstimated = async () => {
     if (!report) return;
 
+    const text = buildEstimatedCopyText(report);
+
+    if (isMobileDevice()) {
+      await navigator.clipboard.writeText(text);
+      setStatus("スマホ用にテキストでコピーしました");
+      return;
+    }
+
     const initialTasksForCopy = report.tasks.filter(
       (task) => task.task_type === "initial"
     );
@@ -256,13 +270,21 @@ export default function ReportPage() {
 
       setStatus("予定タスクの表画像をコピーしました");
     } catch {
-      await navigator.clipboard.writeText(buildEstimatedCopyText(report));
+      await navigator.clipboard.writeText(text);
       setStatus("画像コピーに失敗したため、テキストでコピーしました");
     }
   };
 
   const copyResult = async () => {
     if (!report) return;
+
+    const text = buildResultCopyText(report);
+
+    if (isMobileDevice()) {
+      await navigator.clipboard.writeText(text);
+      setStatus("スマホ用にテキストでコピーしました");
+      return;
+    }
 
     const initialTasksForCopy = report.tasks.filter(
       (task) => task.task_type === "initial"
@@ -317,7 +339,7 @@ export default function ReportPage() {
 
       setStatus("実績レポートの表画像をコピーしました");
     } catch {
-      await navigator.clipboard.writeText(buildResultCopyText(report));
+      await navigator.clipboard.writeText(text);
       setStatus("画像コピーに失敗したため、テキストでコピーしました");
     }
   };
@@ -503,19 +525,23 @@ export default function ReportPage() {
         <section className="rounded-3xl bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">コピー</h2>
 
+          <p className="mt-1 text-sm text-slate-500">
+            PCでは表画像、スマホではテキスト形式でコピーされます。
+          </p>
+
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={copyEstimated}
               className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition active:scale-[0.98] active:bg-emerald-600"
             >
-              予定タスクを表画像でコピー
+              予定タスクをコピー
             </button>
 
             <button
               onClick={copyResult}
               className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition active:scale-[0.98] active:bg-emerald-100"
             >
-              実績レポートを表画像でコピー
+              実績レポートをコピー
             </button>
           </div>
         </section>
