@@ -1,5 +1,7 @@
 "use client";
 
+import { formatClock } from "@/lib/date";
+
 type Props = {
   estimatedMinutes: number;
   elapsedSeconds: number;
@@ -7,22 +9,32 @@ type Props = {
 
 export function TaskProgressRing({ estimatedMinutes, elapsedSeconds }: Props) {
   const estimatedSeconds = Math.max(1, estimatedMinutes * 60);
-  const ratio = elapsedSeconds / estimatedSeconds;
-  const clamped = Math.min(ratio, 1.25);
-  const degrees = clamped * 360;
+  const remainingSeconds = estimatedSeconds - elapsedSeconds;
+  const isOver = remainingSeconds < 0;
 
-  const color =
-    ratio < 0.8 ? "#16a34a" : ratio <= 1 ? "#ca8a04" : "#dc2626";
+  const ratio = Math.min(Math.abs(remainingSeconds) / estimatedSeconds, 1);
+  const degrees = ratio * 360;
+
+  const background = isOver
+    ? `conic-gradient(#dc2626 0deg ${degrees}deg, #e5e7eb ${degrees}deg 360deg)`
+    : `conic-gradient(#16a34a 0deg ${degrees}deg, #e5e7eb ${degrees}deg 360deg)`;
 
   return (
     <div
-      className="relative h-14 w-14 rounded-full"
-      style={{
-        background: `conic-gradient(${color} 0deg ${degrees}deg, #e5e7eb ${degrees}deg 360deg)`,
-      }}
+      className="relative h-16 w-16 rounded-full shrink-0"
+      style={{ background }}
     >
-      <div className="absolute inset-1 flex items-center justify-center rounded-full bg-white text-[10px] font-semibold text-slate-700">
-        {Math.round(ratio * 100)}%
+      <div className="absolute inset-1 flex flex-col items-center justify-center rounded-full bg-white px-1 text-center">
+        <div
+          className={`text-[10px] font-semibold ${
+            isOver ? "text-rose-600" : "text-emerald-600"
+          }`}
+        >
+          {isOver ? "Over" : "Left"}
+        </div>
+        <div className="text-[10px] font-bold text-slate-800">
+          {formatClock(Math.abs(remainingSeconds))}
+        </div>
       </div>
     </div>
   );

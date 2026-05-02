@@ -1,12 +1,21 @@
 "use client";
 
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 import { differenceInSeconds, endOfMonth, format, startOfMonth } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import type { DailyLog, DailyReport, Project, ProjectInput, Task, TaskInput } from "@/lib/types";
-import { createDraftReport } from "@/lib/report";
 import { todayKey } from "@/lib/date";
+import { createDraftReport } from "@/lib/report";
+import type {
+  CalendarEvent,
+  CalendarEventInput,
+  DailyLog,
+  DailyReport,
+  Project,
+  ProjectInput,
+  Task,
+  TaskInput,
+} from "@/lib/types";
 
 type AppState = {
   userId: string | null;
@@ -17,10 +26,10 @@ type AppState = {
   tasks: Task[];
   projects: Project[];
   logs: DailyLog[];
+  calendarEvents: CalendarEvent[];
 
   activeTaskId: string | null;
   timerStartedAt: string | null;
-
   selectedDate: string;
 
   init: () => Promise<void>;
@@ -28,16 +37,23 @@ type AppState = {
   refreshMonth: (date: Date) => Promise<void>;
 
   addTask: (input: TaskInput) => Promise<void>;
-  addProject: (input: ProjectInput) => Promise<void>;
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   saveStrategyMemo: (id: string, memo: string) => Promise<void>;
+
+  addProject: (input: ProjectInput) => Promise<void>;
 
   startTask: (id: string) => Promise<void>;
   pauseActiveTask: () => Promise<void>;
   completeTask: (id: string) => Promise<void>;
 
   finishDay: () => Promise<string | null>;
+  upsertDailyReport: (date: string, report: DailyReport) => Promise<void>;
+
+  addCalendarEvent: (input: CalendarEventInput) => Promise<void>;
+  updateCalendarEvent: (id: string, title: string) => Promise<void>;
+  deleteCalendarEvent: (id: string) => Promise<void>;
+
   signOut: () => Promise<void>;
   setSelectedDate: (dateKey: string) => void;
 };
@@ -53,10 +69,10 @@ export const useAppStore = create<AppState>()(
       tasks: [],
       projects: [],
       logs: [],
+      calendarEvents: [],
 
       activeTaskId: null,
       timerStartedAt: null,
-
       selectedDate: todayKey(),
 
       init: async () => {
@@ -85,7 +101,7 @@ export const useAppStore = create<AppState>()(
         const user = get().userId;
         if (!user) return;
 
-        const [tasksRes, projectsRes, logsRes] = await Promise.all([
+        const [tasksRes, projectsRes, logsRes, eventsRes] = await Promise.all([
           supabase
             .from("tasks")
             .select("*")
@@ -104,12 +120,19 @@ export const useAppStore = create<AppState>()(
             .select("*")
             .eq("user_id", user)
             .order("log_date", { ascending: false })
-            .limit(60),
+            .limit(90),
+
+          supabase
+            .from("calendar_events")
+            .select("*")
+            .eq("user_id", user)
+            .order("event_date", { ascending: true }),
         ]);
 
         if (tasksRes.data) set({ tasks: tasksRes.data as Task[] });
         if (projectsRes.data) set({ projects: projectsRes.data as Project[] });
         if (logsRes.data) set({ logs: logsRes.data as DailyLog[] });
+        if (eventsRes.data) set({ calendarEvents: eventsRes.data as CalendarEvent[] });
       },
 
       refreshMonth: async (date: Date) => {
@@ -119,15 +142,26 @@ export const useAppStore = create<AppState>()(
         const from = format(startOfMonth(date), "yyyy-MM-dd");
         const to = format(endOfMonth(date), "yyyy-MM-dd");
 
-        const { data } = await supabase
-          .from("daily_logs")
-          .select("*")
-          .eq("user_id", user)
-          .gte("log_date", from)
-          .lte("log_date", to)
-          .order("log_date", { ascending: true });
+        const [logsRes, eventsRes] = await Promise.all([
+          supabase
+            .from("daily_logs")
+            .select("*")
+            .eq("user_id", user)
+            .gte("log_date", from)
+            .lte("log_date", to)
+            .order("log_date", { ascending: true }),
 
-        if (data) set({ logs: data as DailyLog[] });
+          supabase
+            .from("calendar_events")
+            .select("*")
+            .eq("user_id", user)
+            .gte("event_date", from)
+            .lte("event_date", to)
+            .order("event_date", { ascending: true }),
+        ]);
+
+        if (logsRes.data) set({ logs: logsRes.data as DailyLog[] });
+        if (eventsRes.data) set({ calendarEvents: eventsRes.data as CalendarEvent[] });
       },
 
       addTask: async (input) => {
@@ -136,32 +170,20 @@ export const useAppStore = create<AppState>()(
 
         const { error } = await supabase.from("tasks").insert({
           user_id: user,
-          project_id: input.project_id,
+          project_id: null,
           title: input.title,
           estimated_minutes: input.estimated_minutes,
           actual_seconds: 0,
           priority: input.priority,
-          weight: input.weight,
+          weight: 1,
           strategy_memo: input.strategy_memo,
           result_memo: "",
           status: "todo",
           started_at: null,
-          due_date: input.due_date,
+          due_date: null,
+          work_date: input.work_date,
+          task_type: input.task_type,
           updated_at: new Date().toISOString(),
-        });
-
-        if (error) throw error;
-        await get().refreshAll();
-      },
-
-      addProject: async (input) => {
-        const user = get().userId;
-        if (!user) return;
-
-        const { error } = await supabase.from("projects").insert({
-          user_id: user,
-          name: input.name,
-          deadline: input.deadline,
         });
 
         if (error) throw error;
@@ -189,6 +211,20 @@ export const useAppStore = create<AppState>()(
 
       saveStrategyMemo: async (id, memo) => {
         await get().updateTask(id, { strategy_memo: memo });
+      },
+
+      addProject: async (input) => {
+        const user = get().userId;
+        if (!user) return;
+
+        const { error } = await supabase.from("projects").insert({
+          user_id: user,
+          name: input.name,
+          deadline: input.deadline,
+        });
+
+        if (error) throw error;
+        await get().refreshAll();
       },
 
       startTask: async (id) => {
@@ -225,12 +261,15 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const id = state.activeTaskId;
         const startedAt = state.timerStartedAt;
+
         if (!id || !startedAt) return;
 
         const task = state.tasks.find((t) => t.id === id);
         if (!task) return;
 
-        const liveSeconds = task.actual_seconds + differenceInSeconds(new Date(), new Date(startedAt));
+        const liveSeconds =
+          task.actual_seconds + differenceInSeconds(new Date(), new Date(startedAt));
+
         const now = new Date().toISOString();
 
         const { error } = await supabase
@@ -261,10 +300,9 @@ export const useAppStore = create<AppState>()(
         let totalSeconds = task.actual_seconds;
 
         if (state.activeTaskId === id && state.timerStartedAt) {
-          totalSeconds = task.actual_seconds + differenceInSeconds(
-            new Date(),
-            new Date(state.timerStartedAt)
-          );
+          totalSeconds =
+            task.actual_seconds +
+            differenceInSeconds(new Date(), new Date(state.timerStartedAt));
         }
 
         const now = new Date().toISOString();
@@ -282,7 +320,10 @@ export const useAppStore = create<AppState>()(
         if (error) throw error;
 
         if (state.activeTaskId === id) {
-          set({ activeTaskId: null, timerStartedAt: null });
+          set({
+            activeTaskId: null,
+            timerStartedAt: null,
+          });
         }
 
         await get().refreshAll();
@@ -300,15 +341,25 @@ export const useAppStore = create<AppState>()(
         await get().refreshAll();
 
         const today = todayKey();
-        const currentTasks = get().tasks;
+        const currentTasks = get().tasks.filter((task) => task.work_date === today);
         const previousLogs = get().logs.filter((log) => log.log_date < today);
 
-        const report: DailyReport = createDraftReport(today, currentTasks, previousLogs);
+        const report = createDraftReport(today, currentTasks, previousLogs);
+
+        await get().upsertDailyReport(today, report);
+
+        set({ selectedDate: today });
+        return today;
+      },
+
+      upsertDailyReport: async (date, report) => {
+        const user = get().userId;
+        if (!user) return;
 
         const { error } = await supabase.from("daily_logs").upsert(
           {
             user_id: user,
-            log_date: today,
+            log_date: date,
             score: report.score,
             report_json: report,
             updated_at: new Date().toISOString(),
@@ -317,21 +368,53 @@ export const useAppStore = create<AppState>()(
         );
 
         if (error) throw error;
-
         await get().refreshAll();
-        set({ selectedDate: today });
+      },
 
-        return today;
+      addCalendarEvent: async (input) => {
+        const user = get().userId;
+        if (!user) return;
+
+        const { error } = await supabase.from("calendar_events").insert({
+          user_id: user,
+          event_date: input.event_date,
+          title: input.title,
+          updated_at: new Date().toISOString(),
+        });
+
+        if (error) throw error;
+        await get().refreshAll();
+      },
+
+      updateCalendarEvent: async (id, title) => {
+        const { error } = await supabase
+          .from("calendar_events")
+          .update({
+            title,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id);
+
+        if (error) throw error;
+        await get().refreshAll();
+      },
+
+      deleteCalendarEvent: async (id) => {
+        const { error } = await supabase.from("calendar_events").delete().eq("id", id);
+        if (error) throw error;
+        await get().refreshAll();
       },
 
       signOut: async () => {
         await supabase.auth.signOut();
+
         set({
           userId: null,
           userEmail: null,
           tasks: [],
           projects: [],
           logs: [],
+          calendarEvents: [],
           activeTaskId: null,
           timerStartedAt: null,
           initialized: false,

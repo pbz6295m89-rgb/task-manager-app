@@ -6,13 +6,18 @@ export function clamp(value: number, min: number, max: number) {
 
 export function calcTaskScore(estimatedMinutes: number, actualSeconds: number) {
   const estimatedSeconds = Math.max(1, estimatedMinutes * 60);
-  const ratio = (estimatedSeconds - actualSeconds) / estimatedSeconds;
-  const score = 100 + ratio * 100;
-  return clamp(Math.round(score), 0, 200);
+  const diffRatio = (estimatedSeconds - actualSeconds) / estimatedSeconds;
+
+  // 時間通りなら100
+  // 早ければ割合分加算
+  // 遅ければ割合分減算
+  return clamp(Math.round(100 + diffRatio * 100), 0, 200);
 }
 
 export function calcDailyBaseScore(tasks: Task[]) {
-  return tasks.reduce((sum, task) => {
+  const initialTasks = tasks.filter((task) => task.task_type === "initial");
+
+  return initialTasks.reduce((sum, task) => {
     return sum + calcTaskScore(task.estimated_minutes, task.actual_seconds);
   }, 0);
 }
@@ -25,21 +30,11 @@ export function calcStreakBonus(previousLogs: DailyLog[], baseScore: number) {
   );
 
   let streak = 0;
+
   for (const log of sorted) {
     if (log.score >= 100) streak += 1;
     else break;
   }
 
   return streak * 20;
-}
-
-export function getProgressRatio(estimatedMinutes: number, actualSeconds: number) {
-  const estimatedSeconds = Math.max(1, estimatedMinutes * 60);
-  return actualSeconds / estimatedSeconds;
-}
-
-export function getProgressTone(ratio: number) {
-  if (ratio < 0.8) return "emerald";
-  if (ratio <= 1) return "amber";
-  return "rose";
 }

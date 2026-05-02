@@ -2,50 +2,76 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "./Modal";
-import type { Project, TaskInput } from "@/lib/types";
+import type { Task, TaskInput, TaskType } from "@/lib/types";
+import { todayKey } from "@/lib/date";
 
 type Props = {
   open: boolean;
+  title: string;
+  taskType: TaskType;
+  editingTask?: Task | null;
   onClose: () => void;
-  onSave: (input: TaskInput) => Promise<void>;
-  projects: Project[];
+  onCreate: (input: TaskInput) => Promise<void>;
+  onUpdate: (id: string, patch: Partial<Task>) => Promise<void>;
 };
 
-export function TaskFormModal({ open, onClose, onSave, projects }: Props) {
-  const [title, setTitle] = useState("");
-  const [estimatedMinutes, setEstimatedMinutes] = useState(60);
+const TIME_OPTIONS = [15, 30, 60, 90, 120];
+
+export function TaskFormModal({
+  open,
+  title,
+  taskType,
+  editingTask,
+  onClose,
+  onCreate,
+  onUpdate,
+}: Props) {
+  const [taskTitle, setTaskTitle] = useState("");
+  const [estimatedMinutes, setEstimatedMinutes] = useState(30);
   const [priority, setPriority] = useState<1 | 2 | 3>(2);
-  const [weight, setWeight] = useState(1);
-  const [projectId, setProjectId] = useState<string | null>(null);
-  const [dueDate, setDueDate] = useState("");
   const [strategyMemo, setStrategyMemo] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!open) {
-      setTitle("");
-      setEstimatedMinutes(60);
-      setPriority(2);
-      setWeight(1);
-      setProjectId(null);
-      setDueDate("");
-      setStrategyMemo("");
-      setSaving(false);
+    if (editingTask) {
+      setTaskTitle(editingTask.title);
+      setEstimatedMinutes(editingTask.estimated_minutes);
+      setPriority(editingTask.priority);
+      setStrategyMemo(editingTask.strategy_memo);
+      return;
     }
-  }, [open]);
+
+    if (open) {
+      setTaskTitle("");
+      setEstimatedMinutes(30);
+      setPriority(2);
+      setStrategyMemo("");
+    }
+  }, [open, editingTask]);
 
   const submit = async () => {
-    if (!title.trim()) return;
+    if (!taskTitle.trim()) return;
+
     setSaving(true);
-    await onSave({
-      title: title.trim(),
-      estimated_minutes: estimatedMinutes,
-      priority,
-      weight,
-      project_id: projectId,
-      due_date: dueDate || null,
-      strategy_memo: strategyMemo.trim(),
-    });
+
+    if (editingTask) {
+      await onUpdate(editingTask.id, {
+        title: taskTitle.trim(),
+        estimated_minutes: estimatedMinutes,
+        priority,
+        strategy_memo: strategyMemo.trim(),
+      });
+    } else {
+      await onCreate({
+        title: taskTitle.trim(),
+        estimated_minutes: estimatedMinutes,
+        priority,
+        strategy_memo: strategyMemo.trim(),
+        task_type: taskType,
+        work_date: todayKey(),
+      });
+    }
+
     setSaving(false);
     onClose();
   };
@@ -53,7 +79,7 @@ export function TaskFormModal({ open, onClose, onSave, projects }: Props) {
   return (
     <Modal
       open={open}
-      title="New Task"
+      title={editingTask ? "Edit Task" : title}
       onClose={onClose}
       footer={
         <button
@@ -61,88 +87,59 @@ export function TaskFormModal({ open, onClose, onSave, projects }: Props) {
           disabled={saving}
           className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white disabled:opacity-50"
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? "Saving..." : editingTask ? "Update" : "Create"}
         </button>
       }
     >
       <div className="space-y-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Task name</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Task name
+          </label>
           <input
             className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="例: 対面商談"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Target time (min)</label>
-            <input
-              type="number"
-              min={1}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-              value={estimatedMinutes}
-              onChange={(e) => setEstimatedMinutes(Number(e.target.value))}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Priority</label>
-            <select
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-              value={priority}
-              onChange={(e) => setPriority(Number(e.target.value) as 1 | 2 | 3)}
-            >
-              <option value={1}>1 (High)</option>
-              <option value={2}>2 (Mid)</option>
-              <option value={3}>3 (Low)</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Weight</label>
-            <input
-              type="number"
-              min={1}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-              value={weight}
-              onChange={(e) => setWeight(Number(e.target.value))}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Project</label>
-            <select
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-              value={projectId ?? ""}
-              onChange={(e) => setProjectId(e.target.value || null)}
-            >
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Deadline</label>
-          <input
-            type="date"
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            placeholder="例: 資料作成"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Strategy memo</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Target time
+          </label>
+          <select
+            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
+            value={estimatedMinutes}
+            onChange={(e) => setEstimatedMinutes(Number(e.target.value))}
+          >
+            {TIME_OPTIONS.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutes}m
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Priority
+          </label>
+          <select
+            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
+            value={priority}
+            onChange={(e) => setPriority(Number(e.target.value) as 1 | 2 | 3)}
+          >
+            <option value={1}>1 High</option>
+            <option value={2}>2 Medium</option>
+            <option value={3}>3 Low</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Strategy memo
+          </label>
           <textarea
             className="min-h-28 w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-900"
             value={strategyMemo}

@@ -1,6 +1,7 @@
 "use client";
 
-import { formatClock, formatShortMinutes } from "@/lib/date";
+import { Edit3 } from "lucide-react";
+import { formatShortMinutes } from "@/lib/date";
 import type { Task } from "@/lib/types";
 import { TaskProgressRing } from "./TaskProgressRing";
 
@@ -12,6 +13,7 @@ type Props = {
   onPause: () => void;
   onDone: () => void;
   onStrategy: () => void;
+  onEdit: () => void;
 };
 
 function statusLabel(status: Task["status"]) {
@@ -19,6 +21,10 @@ function statusLabel(status: Task["status"]) {
   if (status === "working") return "作業中";
   if (status === "break") return "休憩中";
   return "完了";
+}
+
+function typeLabel(type: Task["task_type"]) {
+  return type === "initial" ? "Initial" : "Added";
 }
 
 export function TaskCard({
@@ -29,15 +35,14 @@ export function TaskCard({
   onPause,
   onDone,
   onStrategy,
+  onEdit,
 }: Props) {
-  const elapsed = active ? liveElapsedSeconds : task.actual_seconds;
-
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start gap-4">
         <TaskProgressRing
           estimatedMinutes={task.estimated_minutes}
-          elapsedSeconds={elapsed}
+          elapsedSeconds={liveElapsedSeconds}
         />
 
         <div className="min-w-0 flex-1">
@@ -45,22 +50,39 @@ export function TaskCard({
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
               P{task.priority}
             </span>
+
             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
               {statusLabel(task.status)}
             </span>
+
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                task.task_type === "initial"
+                  ? "bg-slate-900 text-white"
+                  : "bg-indigo-50 text-indigo-700"
+              }`}
+            >
+              {typeLabel(task.task_type)}
+            </span>
           </div>
 
-          <h3 className="mt-2 truncate text-base font-semibold text-slate-900">
-            {task.title}
-          </h3>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <h3 className="truncate text-base font-semibold text-slate-900">
+              {task.title}
+            </h3>
 
-          <div className="mt-2 text-sm text-slate-500">
-            予定 {task.estimated_minutes}m / 実績 {formatShortMinutes(elapsed)}
+            <button
+              onClick={onEdit}
+              className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <Edit3 className="h-4 w-4" />
+            </button>
           </div>
 
-          {task.due_date ? (
-            <div className="mt-1 text-xs text-slate-400">締切 {task.due_date}</div>
-          ) : null}
+          <div className="mt-1 text-sm text-slate-500">
+            目標 {task.estimated_minutes}m / 実績{" "}
+            {formatShortMinutes(liveElapsedSeconds)}
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -91,12 +113,6 @@ export function TaskCard({
               戦略メモ
             </button>
           </div>
-
-          {task.strategy_memo ? (
-            <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-              {task.strategy_memo}
-            </div>
-          ) : null}
         </div>
       </div>
     </div>

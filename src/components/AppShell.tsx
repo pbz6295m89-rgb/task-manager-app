@@ -3,15 +3,15 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarDays, LayoutDashboard, FolderKanban, LogOut } from "lucide-react";
+import { CalendarDays, LayoutDashboard, LogOut } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
- const userId = useAppStore((s) => s.userId);
- const userEmail = useAppStore((s) => s.userEmail);
+  const userId = useAppStore((s) => s.userId);
+  const userEmail = useAppStore((s) => s.userEmail);
   const loading = useAppStore((s) => s.loading);
   const initialized = useAppStore((s) => s.initialized);
   const init = useAppStore((s) => s.init);
@@ -22,7 +22,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [init]);
 
   useEffect(() => {
-    if (initialized && !loading && !userId && pathname !== "/auth" && pathname !== "/auth/callback") {
+    if (
+      initialized &&
+      !loading &&
+      !userId &&
+      pathname !== "/auth" &&
+      pathname !== "/auth/callback"
+    ) {
+      router.replace("/auth");
     }
   }, [initialized, loading, userId, pathname, router]);
 
@@ -61,11 +68,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-5">{children}</main>
 
       <nav className="fixed bottom-0 left-0 right-0 border-t border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-6xl grid-cols-3 px-2 py-2 text-sm">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-2 px-2 py-2 text-sm">
           <Link
             href="/dashboard"
             className={`flex flex-col items-center gap-1 rounded-2xl px-3 py-2 ${
-              pathname === "/dashboard" ? "bg-slate-900 text-white" : "text-slate-500"
+              pathname === "/dashboard"
+                ? "bg-slate-900 text-white"
+                : "text-slate-500"
             }`}
           >
             <LayoutDashboard className="h-4 w-4" />
@@ -73,19 +82,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           <Link
-            href="/projects"
-            className={`flex flex-col items-center gap-1 rounded-2xl px-3 py-2 ${
-              pathname === "/projects" ? "bg-slate-900 text-white" : "text-slate-500"
-            }`}
-          >
-            <FolderKanban className="h-4 w-4" />
-            Projects
-          </Link>
-
-          <Link
             href="/calendar"
             className={`flex flex-col items-center gap-1 rounded-2xl px-3 py-2 ${
-              pathname === "/calendar" ? "bg-slate-900 text-white" : "text-slate-500"
+              pathname === "/calendar"
+                ? "bg-slate-900 text-white"
+                : "text-slate-500"
             }`}
           >
             <CalendarDays className="h-4 w-4" />
