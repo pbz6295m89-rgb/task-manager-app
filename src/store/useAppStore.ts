@@ -15,7 +15,17 @@ import type {
   ProjectInput,
   Task,
   TaskInput,
+  TaskStatus,
 } from "@/lib/types";
+
+function normalizeTitle(title: string) {
+  return title.trim().replace(/\s+/g, " ");
+}
+
+function getCarryOverStatus(status: TaskStatus): TaskStatus {
+  if (status === "working") return "break";
+  return status;
+}
 
 type AppState = {
   userId: string | null;
@@ -39,14 +49,18 @@ type AppState = {
   addTask: (input: TaskInput) => Promise<void>;
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
-  saveStrategyMemo: (id: string, memo: string) => Promise<void>;
 
   addProject: (input: ProjectInput) => Promise<void>;
 
   startTask: (id: string) => Promise<void>;
-  pauseActiveTask: () => Promise<void>;
+  holdActiveTask: () => Promise<void>;
+  switchActiveTaskToTasks: () => Promise<void>;
+  moveTaskToReview: (id: string) => Promise<void>;
   completeTask: (id: string) => Promise<void>;
+  returnTaskToTodo: (id: string) => Promise<void>;
 
+  carryOverUnfinishedTasks: (targetDate: string) => Promise<void>;
+  prepareDailyReport: (date: string) => Promise<string | null>;
   finishDay: () => Promise<string | null>;
   upsertDailyReport: (date: string, report: DailyReport) => Promise<void>;
 
@@ -92,6 +106,7 @@ export const useAppStore = create<AppState>()(
 
         if (user) {
           await get().refreshAll();
+          await get().carryOverUnfinishedTasks(todayKey());
         }
 
         set({ initialized: true, loading: false });
@@ -132,7 +147,9 @@ export const useAppStore = create<AppState>()(
         if (tasksRes.data) set({ tasks: tasksRes.data as Task[] });
         if (projectsRes.data) set({ projects: projectsRes.data as Project[] });
         if (logsRes.data) set({ logs: logsRes.data as DailyLog[] });
-        if (eventsRes.data) set({ calendarEvents: eventsRes.data as CalendarEvent[] });
+        if (eventsRes.data) {
+          set({ calendarEvents: eventsRes.data as CalendarEvent[] });
+        }
       },
 
       refreshMonth: async (date: Date) => {
@@ -161,7 +178,9 @@ export const useAppStore = create<AppState>()(
         ]);
 
         if (logsRes.data) set({ logs: logsRes.data as DailyLog[] });
-        if (eventsRes.data) set({ calendarEvents: eventsRes.data as CalendarEvent[] });
+        if (eventsRes.data) {
+          set({ calendarEvents: eventsRes.data as CalendarEvent[] });
+        }
       },
 
       addTask: async (input) => {
@@ -177,6 +196,7 @@ export const useAppStore = create<AppState>()(
           priority: input.priority,
           weight: 1,
           strategy_memo: input.strategy_memo,
+          question_memo: input.question_memo,
           result_memo: "",
           status: "todo",
           started_at: null,
@@ -209,10 +229,6 @@ export const useAppStore = create<AppState>()(
         await get().refreshAll();
       },
 
-      saveStrategyMemo: async (id, memo) => {
-        await get().updateTask(id, { strategy_memo: memo });
-      },
-
       addProject: async (input) => {
         const user = get().userId;
         if (!user) return;
@@ -229,11 +245,9 @@ export const useAppStore = create<AppState>()(
 
       startTask: async (id) => {
         const state = get();
-        const task = state.tasks.find((t) => t.id === id);
-        if (!task) return;
 
         if (state.activeTaskId && state.activeTaskId !== id) {
-          await get().pauseActiveTask();
+          await get().switchActiveTaskToTasks();
         }
 
         const now = new Date().toISOString();
@@ -257,18 +271,20 @@ export const useAppStore = create<AppState>()(
         await get().refreshAll();
       },
 
-      pauseActiveTask: async () => {
+      holdActiveTask: async () => {
         const state = get();
         const id = state.activeTaskId;
         const startedAt = state.timerStartedAt;
 
-        if (!id || !startedAt) return;
+        if (!id) return;
 
         const task = state.tasks.find((t) => t.id === id);
         if (!task) return;
 
-        const liveSeconds =
-          task.actual_seconds + differenceInSeconds(new Date(), new Date(startedAt));
+        const liveSeconds = startedAt
+          ? task.actual_seconds +
+            differenceInSeconds(new Date(), new Date(startedAt))
+          : task.actual_seconds;
 
         const now = new Date().toISOString();
 
@@ -285,9 +301,83 @@ export const useAppStore = create<AppState>()(
         if (error) throw error;
 
         set({
+          activeTaskId: id,
+          timerStartedAt: null,
+        });
+
+        await get().refreshAll();
+      },
+
+      switchActiveTaskToTasks: async () => {
+        const state = get();
+        const id = state.activeTaskId;
+        const startedAt = state.timerStartedAt;
+
+        if (!id) return;
+
+        const task = state.tasks.find((t) => t.id === id);
+        if (!task) return;
+
+        const liveSeconds = startedAt
+          ? task.actual_seconds +
+            differenceInSeconds(new Date(), new Date(startedAt))
+          : task.actual_seconds;
+
+        const now = new Date().toISOString();
+
+        const { error } = await supabase
+          .from("tasks")
+          .update({
+            actual_seconds: liveSeconds,
+            status: "todo",
+            started_at: null,
+            updated_at: now,
+          })
+          .eq("id", id);
+
+        if (error) throw error;
+
+        set({
           activeTaskId: null,
           timerStartedAt: null,
         });
+
+        await get().refreshAll();
+      },
+
+      moveTaskToReview: async (id) => {
+        const state = get();
+        const task = state.tasks.find((t) => t.id === id);
+        if (!task) return;
+
+        let totalSeconds = task.actual_seconds;
+
+        if (state.activeTaskId === id && state.timerStartedAt) {
+          totalSeconds =
+            task.actual_seconds +
+            differenceInSeconds(new Date(), new Date(state.timerStartedAt));
+        }
+
+        const now = new Date().toISOString();
+
+        const { error } = await supabase
+          .from("tasks")
+          .update({
+            actual_seconds: totalSeconds,
+            status: "review",
+            started_at: null,
+            updated_at: now,
+          })
+          .eq("id", id);
+
+        if (error) throw error;
+
+        if (state.activeTaskId === id) {
+          set({
+            activeTaskId: null,
+            timerStartedAt: null,
+          });
+        }
 
         await get().refreshAll();
       },
@@ -329,27 +419,110 @@ export const useAppStore = create<AppState>()(
         await get().refreshAll();
       },
 
-      finishDay: async () => {
-        const state = get();
-        const user = state.userId;
+      returnTaskToTodo: async (id) => {
+        const now = new Date().toISOString();
+
+        const { error } = await supabase
+          .from("tasks")
+          .update({
+            status: "todo",
+            started_at: null,
+            updated_at: now,
+          })
+          .eq("id", id);
+
+        if (error) throw error;
+        await get().refreshAll();
+      },
+
+      carryOverUnfinishedTasks: async (targetDate) => {
+        const user = get().userId;
+        if (!user) return;
+
+        const allTasks = get().tasks;
+
+        const targetDateTasks = allTasks.filter(
+          (task) => task.work_date === targetDate
+        );
+
+        const previousUnfinishedTasks = allTasks.filter(
+          (task) => task.work_date < targetDate && task.status !== "done"
+        );
+
+        if (previousUnfinishedTasks.length === 0) return;
+
+        const latestPreviousDate = previousUnfinishedTasks
+          .map((task) => task.work_date)
+          .sort((a, b) => b.localeCompare(a))[0];
+
+        const carryTargets = previousUnfinishedTasks.filter(
+          (task) => task.work_date === latestPreviousDate
+        );
+
+        const existingTitles = new Set(
+          targetDateTasks.map((task) => normalizeTitle(task.title))
+        );
+
+        const insertRows = carryTargets
+          .filter((task) => !existingTitles.has(normalizeTitle(task.title)))
+          .map((task) => ({
+            user_id: user,
+            project_id: task.project_id,
+            title: task.title,
+            estimated_minutes: task.estimated_minutes,
+            actual_seconds: task.actual_seconds,
+            priority: task.priority,
+            weight: task.weight,
+            strategy_memo: task.strategy_memo ?? "",
+            question_memo: task.question_memo ?? "",
+            result_memo: "",
+            status: getCarryOverStatus(task.status),
+            started_at: null,
+            due_date: task.due_date,
+            work_date: targetDate,
+            task_type: task.task_type,
+            updated_at: new Date().toISOString(),
+          }));
+
+        if (insertRows.length === 0) return;
+
+        const { error } = await supabase.from("tasks").insert(insertRows);
+
+        if (error) throw error;
+
+        await get().refreshAll();
+      },
+
+      prepareDailyReport: async (date) => {
+        const user = get().userId;
         if (!user) return null;
 
+        const state = get();
+
         if (state.activeTaskId) {
-          await get().pauseActiveTask();
+          const activeTask = state.tasks.find(
+            (task) => task.id === state.activeTaskId
+          );
+
+          if (activeTask?.work_date === date) {
+            await get().holdActiveTask();
+          }
         }
 
         await get().refreshAll();
 
-        const today = todayKey();
-        const currentTasks = get().tasks.filter((task) => task.work_date === today);
-        const previousLogs = get().logs.filter((log) => log.log_date < today);
+        const latestTasks = get().tasks.filter((task) => task.work_date === date);
+        const previousLogs = get().logs.filter((log) => log.log_date < date);
+        const report = createDraftReport(date, latestTasks, previousLogs);
 
-        const report = createDraftReport(today, currentTasks, previousLogs);
+        await get().upsertDailyReport(date, report);
 
-        await get().upsertDailyReport(today, report);
+        set({ selectedDate: date });
+        return date;
+      },
 
-        set({ selectedDate: today });
-        return today;
+      finishDay: async () => {
+        return get().prepareDailyReport(todayKey());
       },
 
       upsertDailyReport: async (date, report) => {
@@ -400,7 +573,11 @@ export const useAppStore = create<AppState>()(
       },
 
       deleteCalendarEvent: async (id) => {
-        const { error } = await supabase.from("calendar_events").delete().eq("id", id);
+        const { error } = await supabase
+          .from("calendar_events")
+          .delete()
+          .eq("id", id);
+
         if (error) throw error;
         await get().refreshAll();
       },

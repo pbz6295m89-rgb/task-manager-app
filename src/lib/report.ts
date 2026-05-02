@@ -1,23 +1,23 @@
 import type { DailyLog, DailyReport, Task } from "./types";
-import { calcDailyBaseScore, calcStreakBonus } from "./score";
+import { calcDailyScoreDetails } from "./score";
 
 export function createDraftReport(
   date: string,
   tasks: Task[],
   previousLogs: DailyLog[]
 ): DailyReport {
+  // previousLogs は今は使わないが、既存の呼び出し側を壊さないために残す
+  void previousLogs;
+
   const dayTasks = tasks.filter((task) => task.work_date === date);
   const initialTasks = dayTasks.filter((task) => task.task_type === "initial");
 
-  const baseScore = calcDailyBaseScore(dayTasks);
-  const streakBonus = calcStreakBonus(previousLogs, baseScore);
-  const score = baseScore + streakBonus;
+  const scoreResult = calcDailyScoreDetails(dayTasks);
 
   return {
     date,
-    base_score: baseScore,
-    streak_bonus: streakBonus,
-    score,
+    base_score: scoreResult.score,
+    score: scoreResult.score,
     total_estimated_minutes: initialTasks.reduce(
       (sum, task) => sum + task.estimated_minutes,
       0
@@ -27,6 +27,7 @@ export function createDraftReport(
       0
     ),
     overall_memo: "",
+    score_details: scoreResult.details,
     tasks: dayTasks
       .slice()
       .sort((a, b) => {
@@ -47,63 +48,77 @@ export function createDraftReport(
   };
 }
 
+export function reportStatusLabel(status: string, actualSeconds = 0) {
+  if (status === "done") return "完了";
+  if (status === "working") return "作業中";
+  if (actualSeconds >= 60) return "進行中";
+  return "未着手";
+}
+
 export function buildEstimatedCopyText(report: DailyReport) {
-  const initialTasks = report.tasks.filter((task) => task.task_type === "initial");
+  const initialTasks = report.tasks.filter(
+    (task) => task.task_type === "initial"
+  );
 
   return [
-    `Date: ${report.date}`,
+    `日付: ${report.date}`,
     "",
-    "Estimated Tasks:",
+    "初期タスク名:",
     ...initialTasks.map(
-      (task) => `- ${task.title}: ${task.estimated_minutes} min`
+      (task) => `- ${task.title}: 予測時間 ${task.estimated_minutes}分`
     ),
     "",
-    `Total Estimated: ${report.total_estimated_minutes} min`,
+    `合計予測時間: ${report.total_estimated_minutes}分`,
   ].join("\n");
 }
 
 export function buildResultCopyText(report: DailyReport) {
-  const initialTasks = report.tasks.filter((task) => task.task_type === "initial");
+  const initialTasks = report.tasks.filter(
+    (task) => task.task_type === "initial"
+  );
   const addedTasks = report.tasks.filter((task) => task.task_type === "added");
-  const unfinishedTasks = report.tasks.filter((task) => task.status !== "done");
 
   const lines: string[] = [];
 
-  lines.push(`Date: ${report.date}`);
-  lines.push(`Score: ${report.score}`);
+  lines.push(`日付: ${report.date}`);
+  lines.push(`スコア: ${report.score}`);
   lines.push("");
 
-  lines.push("Actual Results:");
+  lines.push("初期タスク名:");
   for (const task of initialTasks) {
     lines.push(
-      `- ${task.title}: estimated ${task.estimated_minutes} min / actual ${Math.round(
+      `- ${task.title}: 予測時間 ${task.estimated_minutes}分 / 実績時間 ${Math.round(
         task.actual_seconds / 60
-      )} min`
+      )}分 / ${reportStatusLabel(task.status, task.actual_seconds)}`
     );
+
+    if (task.reason.trim()) {
+      lines.push(`  進捗報告: ${task.reason}`);
+    }
   }
 
   if (addedTasks.length > 0) {
     lines.push("");
-    lines.push("Added Tasks:");
+    lines.push("追加タスク:");
     for (const task of addedTasks) {
       lines.push(
-        `- ${task.title}: actual ${Math.round(task.actual_seconds / 60)} min`
+        `- ${task.title}: 実績時間 ${Math.round(
+          task.actual_seconds / 60
+        )}分 / ${reportStatusLabel(task.status, task.actual_seconds)}`
       );
+
+      if (task.reason.trim()) {
+        lines.push(`  進捗報告: ${task.reason}`);
+      }
     }
   }
 
-  if (unfinishedTasks.length > 0) {
-    lines.push("");
-    lines.push("Unfinished Tasks:");
-    for (const task of unfinishedTasks) {
-      lines.push(`- ${task.title}`);
-      if (task.reason.trim()) lines.push(`  reason: ${task.reason}`);
-    }
-  }
+  lines.push("");
+  lines.push(`合計実績時間: ${Math.round(report.total_actual_seconds / 60)}分`);
 
   if (report.overall_memo.trim()) {
     lines.push("");
-    lines.push("Other Reasons / Reflection:");
+    lines.push("コメント:");
     lines.push(report.overall_memo);
   }
 

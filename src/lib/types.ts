@@ -1,4 +1,4 @@
-export type TaskStatus = "todo" | "working" | "break" | "done";
+export type TaskStatus = "todo" | "working" | "break" | "review" | "done";
 export type TaskType = "initial" | "added";
 
 export type Project = {
@@ -19,6 +19,7 @@ export type Task = {
   priority: 1 | 2 | 3;
   weight: number;
   strategy_memo: string;
+  question_memo: string;
   result_memo: string;
   status: TaskStatus;
   started_at: string | null;
@@ -34,6 +35,7 @@ export type TaskInput = {
   estimated_minutes: number;
   priority: 1 | 2 | 3;
   strategy_memo: string;
+  question_memo: string;
   task_type: TaskType;
   work_date: string;
 };
@@ -57,6 +59,12 @@ export type CalendarEventInput = {
   title: string;
 };
 
+export type ScoreDetail = {
+  label: string;
+  points: number;
+  reason: string;
+};
+
 export type DailyReportTask = {
   task_id: string;
   title: string;
@@ -70,12 +78,12 @@ export type DailyReportTask = {
 export type DailyReport = {
   date: string;
   base_score: number;
-  streak_bonus: number;
   score: number;
   total_estimated_minutes: number;
   total_actual_seconds: number;
   overall_memo: string;
   tasks: DailyReportTask[];
+  score_details: ScoreDetail[];
 };
 
 export type DailyLog = {

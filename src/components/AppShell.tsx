@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!initialized || loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 text-slate-500">
-        Loading...
+        読み込み中...
       </div>
     );
   }
@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div>
-            <div className="text-xs text-slate-500">Signed in as</div>
+            <div className="text-xs text-slate-500">ログイン中</div>
             <div className="text-sm font-medium">{userEmail}</div>
           </div>
 
@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
           >
             <LogOut className="h-4 w-4" />
-            Sign out
+            ログアウト
           </button>
         </div>
       </header>
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             }`}
           >
             <LayoutDashboard className="h-4 w-4" />
-            Today
+            今日
           </Link>
 
           <Link
@@ -90,7 +90,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             }`}
           >
             <CalendarDays className="h-4 w-4" />
-            Calendar
+            カレンダー
           </Link>
         </div>
       </nav>

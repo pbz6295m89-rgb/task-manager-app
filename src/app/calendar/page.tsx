@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CalendarGrid } from "@/components/CalendarGrid";
 import { Modal } from "@/components/Modal";
@@ -10,18 +10,21 @@ import type { CalendarEvent } from "@/lib/types";
 import { useAppStore } from "@/store/useAppStore";
 
 export default function CalendarPage() {
+  const router = useRouter();
+
   const [monthDate, setMonthDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const refreshMonth = useAppStore((s) => s.refreshMonth);
   const logs = useAppStore((s) => s.logs);
-  const tasks = useAppStore((s) => s.tasks);
   const events = useAppStore((s) => s.calendarEvents);
   const addCalendarEvent = useAppStore((s) => s.addCalendarEvent);
   const updateCalendarEvent = useAppStore((s) => s.updateCalendarEvent);
   const deleteCalendarEvent = useAppStore((s) => s.deleteCalendarEvent);
+  const prepareDailyReport = useAppStore((s) => s.prepareDailyReport);
 
   useEffect(() => {
     refreshMonth(monthDate);
@@ -33,11 +36,6 @@ export default function CalendarPage() {
     if (!selectedDate) return [];
     return events.filter((event) => event.event_date === selectedDate);
   }, [events, selectedDate]);
-
-  const selectedTasks = useMemo(() => {
-    if (!selectedDate) return [];
-    return tasks.filter((task) => task.work_date === selectedDate);
-  }, [tasks, selectedDate]);
 
   const saveEvent = async () => {
     if (!selectedDate || !title.trim()) return;
@@ -55,12 +53,26 @@ export default function CalendarPage() {
     setEditingEvent(null);
   };
 
+  const openReport = async () => {
+    if (!selectedDate) return;
+
+    setReportLoading(true);
+
+    const date = await prepareDailyReport(selectedDate);
+
+    setReportLoading(false);
+
+    if (date) {
+      router.push(`/report/${date}`);
+    }
+  };
+
   return (
     <AppShell>
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-slate-500">Calendar</p>
+            <p className="text-sm text-slate-500">カレンダー</p>
             <h1 className="text-2xl font-bold text-slate-900">{label}</h1>
           </div>
 
@@ -71,9 +83,9 @@ export default function CalendarPage() {
                   new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1)
                 )
               }
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition active:bg-emerald-100"
             >
-              Prev
+              前月
             </button>
 
             <button
@@ -82,9 +94,9 @@ export default function CalendarPage() {
                   new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1)
                 )
               }
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition active:bg-emerald-100"
             >
-              Next
+              次月
             </button>
           </div>
         </div>
@@ -92,7 +104,6 @@ export default function CalendarPage() {
         <CalendarGrid
           monthDate={monthDate}
           logs={logs}
-          tasks={tasks}
           events={events}
           onDayClick={(dateKey) => {
             setSelectedDate(dateKey);
@@ -114,7 +125,7 @@ export default function CalendarPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Add / Edit schedule
+              予定を追加・編集
             </label>
 
             <div className="flex gap-2">
@@ -127,15 +138,15 @@ export default function CalendarPage() {
 
               <button
                 onClick={saveEvent}
-                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white"
+                className="rounded-2xl bg-slate-900 px-4 py-3 text-sm font-medium text-white transition active:bg-emerald-600 active:scale-[0.98]"
               >
-                {editingEvent ? "Update" : "Add"}
+                {editingEvent ? "更新" : "追加"}
               </button>
             </div>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-slate-900">Schedules</h3>
+            <h3 className="text-sm font-semibold text-slate-900">予定</h3>
 
             {selectedEvents.length === 0 ? (
               <p className="mt-2 text-sm text-slate-500">予定はありません。</p>
@@ -156,16 +167,16 @@ export default function CalendarPage() {
                           setEditingEvent(event);
                           setTitle(event.title);
                         }}
-                        className="text-xs text-slate-500"
+                        className="text-xs text-slate-500 active:text-emerald-600"
                       >
-                        Edit
+                        編集
                       </button>
 
                       <button
                         onClick={() => deleteCalendarEvent(event.id)}
-                        className="text-xs text-rose-500"
+                        className="text-xs text-rose-500 active:text-rose-700"
                       >
-                        Delete
+                        削除
                       </button>
                     </div>
                   </div>
@@ -174,39 +185,13 @@ export default function CalendarPage() {
             )}
           </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-slate-900">Tasks</h3>
-
-            {selectedTasks.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">タスクはありません。</p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {selectedTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="rounded-2xl border border-slate-200 p-3"
-                  >
-                    <div className="truncate text-sm font-medium text-slate-900">
-                      {task.title}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {task.task_type === "initial" ? "Initial" : "Added"} /{" "}
-                      {task.estimated_minutes}m
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {selectedDate ? (
-            <Link
-              href={`/report/${selectedDate}`}
-              className="block rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white"
-            >
-              View Report
-            </Link>
-          ) : null}
+          <button
+            onClick={openReport}
+            disabled={reportLoading}
+            className="block w-full rounded-2xl bg-slate-900 px-4 py-3 text-center text-sm font-medium text-white transition active:bg-emerald-600 active:scale-[0.98] disabled:opacity-50"
+          >
+            {reportLoading ? "レポート作成中..." : "レポートを見る"}
+          </button>
         </div>
       </Modal>
     </AppShell>
