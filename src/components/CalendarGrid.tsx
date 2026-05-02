@@ -55,11 +55,12 @@ export function CalendarGrid({
             <button
               key={key}
               onClick={() => onDayClick(key)}
-              className={`min-h-[86px] border-r border-b border-slate-100 p-1 text-left transition active:bg-emerald-50 sm:min-h-28 sm:p-2 md:min-h-32 md:p-3 ${
+              className={`min-h-[96px] border-r border-b border-slate-100 p-1 text-left transition active:bg-emerald-50 sm:min-h-28 sm:p-2 md:min-h-32 md:p-3 ${
                 inMonth ? "bg-white" : "bg-slate-50 text-slate-300"
-              } ${today ? "relative bg-slate-50" : ""}`}
+              } ${today ? "bg-slate-50" : ""}`}
             >
-              <div className="flex items-start justify-between gap-1">
+              {/* 1. 日付 */}
+              <div className="flex justify-center">
                 <div
                   className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold sm:h-7 sm:w-7 sm:text-xs ${
                     today
@@ -71,24 +72,30 @@ export function CalendarGrid({
                 >
                   {format(date, "d")}
                 </div>
+              </div>
 
+              {/* 2. スコア */}
+              <div className="mt-1 flex justify-center">
                 {log ? (
                   <div
-                    className={`max-w-[38px] truncate rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:max-w-[48px] sm:text-[10px] ${scoreStyle(
+                    className={`max-w-full truncate rounded-full px-1.5 py-0.5 text-[9px] font-bold sm:text-[10px] ${scoreStyle(
                       log.score
                     )}`}
                     title={`${log.score} pt`}
                   >
                     {log.score}
                   </div>
-                ) : null}
+                ) : (
+                  <div className="h-[18px]" />
+                )}
               </div>
 
+              {/* 3. タスク・予定 */}
               <div className="mt-1 space-y-1 overflow-hidden">
                 {dayEvents.slice(0, 2).map((event) => (
                   <div
                     key={event.id}
-                    className="truncate rounded-md bg-indigo-50 px-1 py-0.5 text-[9px] font-medium text-indigo-700 sm:px-1.5 sm:text-[10px]"
+                    className="truncate rounded-md bg-indigo-50 px-1 py-0.5 text-center text-[9px] font-medium text-indigo-700 sm:px-1.5 sm:text-[10px]"
                     title={event.title}
                   >
                     {event.title}
@@ -96,7 +103,7 @@ export function CalendarGrid({
                 ))}
 
                 {dayEvents.length > 2 ? (
-                  <div className="truncate text-[9px] font-medium text-slate-400 sm:text-[10px]">
+                  <div className="truncate text-center text-[9px] font-medium text-slate-400 sm:text-[10px]">
                     他{dayEvents.length - 2}件
                   </div>
                 ) : null}
